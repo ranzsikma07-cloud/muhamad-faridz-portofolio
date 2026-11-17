@@ -6,6 +6,8 @@ import Magnet from "./Magnet";
 import GlareHover from "./GlareHover";
 import ClickSpark from "./ClickSpark";
 import WaveformPlayer from "./WaveformPlayer";
+import HalftoneReveal from "./HalftoneReveal";
+import LogoLoop from "./LogoLoop";
 
 // Hook: state yang tersimpan otomatis di browser (localStorage)
 function useStored(key, initial) {
@@ -41,7 +43,22 @@ function Tilt({ children, className = "" }) {
 
 // Teks muncul huruf per huruf dengan efek blur (ala BlurText)
 function BlurText({ text }) {
-  return <h1 aria-label={text}>{[...text].map((ch, i) => <span key={i} className="bt" style={{ animationDelay: i * 50 + "ms" }}>{ch === " " ? "\u00a0" : ch}</span>)}</h1>;
+  // Huruf dikelompokkan per kata supaya kata tidak terpotong di tengah saat pindah baris
+  let start = 0;
+  return (
+    <h1 aria-label={text}>
+      {text.split(" ").flatMap((word, w) => {
+        const s0 = start;
+        start += word.length;
+        return [
+          w > 0 ? " " : null,
+          <span key={w} style={{ display: "inline-block", whiteSpace: "nowrap" }}>
+            {[...word].map((ch, i) => <span key={i} className="bt" style={{ animationDelay: (s0 + i) * 50 + "ms" }}>{ch}</span>)}
+          </span>,
+        ];
+      })}
+    </h1>
+  );
 }
 
 // Komponen FluxLines asli dari React Bits (MIT, David Haz), disatukan ke satu file
@@ -548,11 +565,11 @@ function Typing({ words }) {
 const PROFILE = {
   name: "Muhamad Faridz Marwan",
   role: "Web Developer & Game Developer",
-  bio: "Saya Muhamad Faridz Marwan, pengembang web yang tertarik pada antarmuka yang hidup dan rapi. Saya sudah membuat beberapa project nyata, mulai dari platform trading forex dan crypto, marketplace kendaraan, sampai website jasa dengan sistem login Firebase. Di luar web, saya mengembangkan game Roblox dan terus belajar lewat kelas Dicoding di bidang web, JavaScript, React, dan pengembangan mobile.",
+  bio: "Saya Faridz, pengembang web yang tertarik pada antarmuka yang hidup dan rapi. Saya sudah membuat beberapa project nyata, mulai dari platform trading forex dan crypto, marketplace kendaraan, sampai website jasa dengan sistem login Firebase. Di luar web, saya mengembangkan game Roblox dan terus belajar lewat kelas Dicoding di bidang web, JavaScript, React, dan pengembangan mobile.",
   photo: "/foto.jpg",
   email: "faridmarwan521@gmail.com",
   github: "https://github.com/ranzsikma07-cloud", // ganti dengan link GitHub kamu
-  linkedin: "https://www.linkedin.com/in/muhamad-faridz-marwan-5a3320450 ", // ganti dengan link LinkedIn kamu
+  linkedin: "https://www.linkedin.com/in/muhamad-faridz-marwan-5a3320450", // ganti dengan link LinkedIn kamu
   x: "https://x.com/Reyaja01", // ganti dengan link X kamu
   discord: "https://discord.com/users/ranzsikma", // link profil/invite Discord, atau cukup username (contoh: "namakamu")
 };
@@ -614,7 +631,7 @@ function Img({ src, alt, fallback }) {
   return <img src={src} alt={alt} onError={() => setBad(true)} />;
 }
 
-function Gallery({ id, title, accent, items, zoom, cta = "Kunjungi ↗" }) {
+function Gallery({ id, title, accent, items, zoom, cta = "Kunjungi ↗", extra }) {
   const [view, setView] = useState(null);
   const n = items.length;
   useEffect(() => {
@@ -635,6 +652,7 @@ function Gallery({ id, title, accent, items, zoom, cta = "Kunjungi ↗" }) {
       <Reveal>
         <h2>{title} <span>{accent}</span></h2>
       </Reveal>
+      {extra}
       <div className="grid">
         {items.map((it, i) => (
           <Reveal key={it.id}>
@@ -675,6 +693,91 @@ function Gallery({ id, title, accent, items, zoom, cta = "Kunjungi ↗" }) {
   );
 }
 
+// Fotomu tampil dulu -> kilau menyapu -> berganti ke gambar revealSrc (efek Halftone Reveal)
+// -> kilau lagi -> kembali ke fotomu -> dan seterusnya (berulang). Di HP tetap fotomu.
+const SHINE_MS = 2000; // lama satu kilau sampai selesai (sudah termasuk jeda awal 0,3 detik)
+const PHOTO_HOLD = 4000; // fotomu ditampilkan selama ini (ms) sebelum kilau berikutnya
+const ALT_HOLD = 8000; // gambar halftone ditampilkan selama ini (ms)
+
+function PhotoReveal({ src, revealSrc, alt, theme, fallback }) {
+  const [showAlt, setShowAlt] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [shine, setShine] = useState(1); // kilau pertama langsung jalan saat halaman dibuka
+  const hover = useRef(false);
+
+  useEffect(() => {
+    const ok = window.matchMedia("(hover: hover) and (pointer: fine)").matches && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!ok || !src) return;
+    let alive = true, timer;
+    const wait = (ms) => new Promise((r) => { timer = setTimeout(r, ms); });
+    (async () => {
+      let altNow = false, first = true;
+      while (alive) {
+        if (!first) setShine((k) => k + 1); // mulai kilau baru
+        first = false;
+        await wait(SHINE_MS + 100); // tunggu kilau selesai
+        if (!alive) return;
+        altNow = !altNow;
+        if (!altNow) hover.current = false;
+        setShowAlt(altNow);
+        if (altNow) setMounted(true);
+        await wait(altNow ? ALT_HOLD : PHOTO_HOLD);
+        while (alive && hover.current) await wait(300); // jangan ganti selagi kursor main di foto
+      }
+    })();
+    return () => { alive = false; clearTimeout(timer); };
+  }, [src]);
+
+  const dark = theme === "dark";
+  return (
+    <>
+      <Img src={src} alt={alt} fallback={fallback} />
+      {mounted && (
+        <div
+          className={"ht-layer" + (showAlt ? " on" : "")}
+          onPointerEnter={() => { hover.current = true; }}
+          onPointerLeave={() => { hover.current = false; }}
+        >
+          <HalftoneReveal
+            src={revealSrc || src}
+            cellSize={5}
+            inkColor={dark ? "#ece8e1" : "#2a1f18"}
+            paperColor={dark ? "#1d1b18" : "#fffdf9"}
+            accentColor={dark ? "#ee7b52" : "#c8472b"}
+            revealRadius={110}
+            linger={1.2}
+          />
+        </div>
+      )}
+      <span key={shine} className="shine-sweep" />
+    </>
+  );
+}
+
+// Logo teknologi untuk LogoLoop (Simple Icons, lisensi CC0)
+const TECH_ICONS = {"html5": "M1.5 0h21l-1.91 21.563L11.977 24l-8.564-2.438L1.5 0zm7.031 9.75l-.232-2.718 10.059.003.23-2.622L5.412 4.41l.698 8.01h9.126l-.326 3.426-2.91.804-2.955-.81-.188-2.11H6.248l.33 4.171L12 19.351l5.379-1.443.744-8.157H8.531z", "css3": "M1.5 0h21l-1.91 21.563L11.977 24l-8.565-2.438L1.5 0zm17.09 4.413L5.41 4.41l.213 2.622 10.125.002-.255 2.716h-6.64l.24 2.573h6.182l-.366 3.523-2.91.804-2.956-.81-.188-2.11h-2.61l.29 3.855L12 19.288l5.373-1.53L18.59 4.414z", "javascript": "M0 0h24v24H0V0zm22.034 18.276c-.175-1.095-.888-2.015-3.003-2.873-.736-.345-1.554-.585-1.797-1.14-.091-.33-.105-.51-.046-.705.15-.646.915-.84 1.515-.66.39.12.75.42.976.9 1.034-.676 1.034-.676 1.755-1.125-.27-.42-.404-.601-.586-.78-.63-.705-1.469-1.065-2.834-1.034l-.705.089c-.676.165-1.32.525-1.71 1.005-1.14 1.291-.811 3.541.569 4.471 1.365 1.02 3.361 1.244 3.616 2.205.24 1.17-.87 1.545-1.966 1.41-.811-.18-1.26-.586-1.755-1.336l-1.83 1.051c.21.48.45.689.81 1.109 1.74 1.756 6.09 1.666 6.871-1.004.029-.09.24-.705.074-1.65l.046.067zm-8.983-7.245h-2.248c0 1.938-.009 3.864-.009 5.805 0 1.232.063 2.363-.138 2.711-.33.689-1.18.601-1.566.48-.396-.196-.597-.466-.83-.855-.063-.105-.11-.196-.127-.196l-1.825 1.125c.305.63.75 1.172 1.324 1.517.855.51 2.004.675 3.207.405.783-.226 1.458-.691 1.811-1.411.51-.93.402-2.07.397-3.346.012-2.054 0-4.109 0-6.179l.004-.056z", "react": "M14.23 12.004a2.236 2.236 0 0 1-2.235 2.236 2.236 2.236 0 0 1-2.236-2.236 2.236 2.236 0 0 1 2.235-2.236 2.236 2.236 0 0 1 2.236 2.236zm2.648-10.69c-1.346 0-3.107.96-4.888 2.622-1.78-1.653-3.542-2.602-4.887-2.602-.41 0-.783.093-1.106.278-1.375.793-1.683 3.264-.973 6.365C1.98 8.917 0 10.42 0 12.004c0 1.59 1.99 3.097 5.043 4.03-.704 3.113-.39 5.588.988 6.38.32.187.69.275 1.102.275 1.345 0 3.107-.96 4.888-2.624 1.78 1.654 3.542 2.603 4.887 2.603.41 0 .783-.09 1.106-.275 1.374-.792 1.683-3.263.973-6.365C22.02 15.096 24 13.59 24 12.004c0-1.59-1.99-3.097-5.043-4.032.704-3.11.39-5.587-.988-6.38-.318-.184-.688-.277-1.092-.278zm-.005 1.09v.006c.225 0 .406.044.558.127.666.382.955 1.835.73 3.704-.054.46-.142.945-.25 1.44-.96-.236-2.006-.417-3.107-.534-.66-.905-1.345-1.727-2.035-2.447 1.592-1.48 3.087-2.292 4.105-2.295zm-9.77.02c1.012 0 2.514.808 4.11 2.28-.686.72-1.37 1.537-2.02 2.442-1.107.117-2.154.298-3.113.538-.112-.49-.195-.964-.254-1.42-.23-1.868.054-3.32.714-3.707.19-.09.4-.127.563-.132zm4.882 3.05c.455.468.91.992 1.36 1.564-.44-.02-.89-.034-1.345-.034-.46 0-.915.01-1.36.034.44-.572.895-1.096 1.345-1.565zM12 8.1c.74 0 1.477.034 2.202.093.406.582.802 1.203 1.183 1.86.372.64.71 1.29 1.018 1.946-.308.655-.646 1.31-1.013 1.95-.38.66-.773 1.288-1.18 1.87-.728.063-1.466.098-2.21.098-.74 0-1.477-.035-2.202-.093-.406-.582-.802-1.204-1.183-1.86-.372-.64-.71-1.29-1.018-1.946.303-.657.646-1.313 1.013-1.954.38-.66.773-1.286 1.18-1.868.728-.064 1.466-.098 2.21-.098zm-3.635.254c-.24.377-.48.763-.704 1.16-.225.39-.435.782-.635 1.174-.265-.656-.49-1.31-.676-1.947.64-.15 1.315-.283 2.015-.386zm7.26 0c.695.103 1.365.23 2.006.387-.18.632-.405 1.282-.66 1.933-.2-.39-.41-.783-.64-1.174-.225-.392-.465-.774-.705-1.146zm3.063.675c.484.15.944.317 1.375.498 1.732.74 2.852 1.708 2.852 2.476-.005.768-1.125 1.74-2.857 2.475-.42.18-.88.342-1.355.493-.28-.958-.646-1.956-1.1-2.98.45-1.017.81-2.01 1.085-2.964zm-13.395.004c.278.96.645 1.957 1.1 2.98-.45 1.017-.812 2.01-1.086 2.964-.484-.15-.944-.318-1.37-.5-1.732-.737-2.852-1.706-2.852-2.474 0-.768 1.12-1.742 2.852-2.476.42-.18.88-.342 1.356-.494zm11.678 4.28c.265.657.49 1.312.676 1.948-.64.157-1.316.29-2.016.39.24-.375.48-.762.705-1.158.225-.39.435-.788.636-1.18zm-9.945.02c.2.392.41.783.64 1.175.23.39.465.772.705 1.143-.695-.102-1.365-.23-2.006-.386.18-.63.406-1.282.66-1.933zM17.92 16.32c.112.493.2.968.254 1.423.23 1.868-.054 3.32-.714 3.708-.147.09-.338.128-.563.128-1.012 0-2.514-.807-4.11-2.28.686-.72 1.37-1.536 2.02-2.44 1.107-.118 2.154-.3 3.113-.54zm-11.83.01c.96.234 2.006.415 3.107.532.66.905 1.345 1.727 2.035 2.446-1.595 1.483-3.092 2.295-4.11 2.295-.22-.005-.406-.05-.553-.132-.666-.38-.955-1.834-.73-3.703.054-.46.142-.944.25-1.438zm4.56.64c.44.02.89.034 1.345.034.46 0 .915-.01 1.36-.034-.44.572-.895 1.095-1.345 1.565-.455-.47-.91-.993-1.36-1.565z", "lua": "M.38 10.377l-.272-.037c-.048.344-.082.695-.101 1.041l.275.016c.018-.34.051-.682.098-1.02zM4.136 3.289l-.184-.205c-.258.232-.509.48-.746.734l.202.188c.231-.248.476-.49.728-.717zM5.769 2.059l-.146-.235c-.296.186-.586.385-.863.594l.166.219c.27-.203.554-.399.843-.578zM1.824 18.369c.185.297.384.586.593.863l.22-.164c-.205-.271-.399-.555-.58-.844l-.233.145zM1.127 16.402l-.255.104c.129.318.274.635.431.943l.005.01.245-.125-.005-.01c-.153-.301-.295-.611-.421-.922zM.298 9.309l.269.063c.076-.332.168-.664.272-.986l-.261-.087c-.108.332-.202.672-.28 1.01zM.274 12.42l-.275.01c.012.348.04.699.083 1.043l.273-.033c-.042-.336-.069-.68-.081-1.02zM.256 14.506c.073.34.162.682.264 1.014l.263-.08c-.1-.326-.187-.658-.258-.99l-.269.056zM11.573.275L11.563 0c-.348.012-.699.039-1.044.082l.034.273c.338-.041.68-.068 1.02-.08zM23.221 8.566c.1.326.186.66.256.992l.27-.059c-.072-.34-.16-.682-.262-1.014l-.264.081zM17.621 1.389c-.309-.164-.627-.314-.947-.449l-.107.252c.314.133.625.281.926.439l.128-.242zM15.693.572c-.332-.105-.67-.199-1.01-.277l-.063.268c.332.076.664.168.988.273l.085-.264zM6.674 1.545c.298-.15.606-.291.916-.418L7.486.873c-.317.127-.632.272-.937.428l-.015.008.125.244.015-.008zM23.727 11.588l.275-.01a11.797 11.797 0 0 0-.082-1.045l-.273.033c.041.338.068.682.08 1.022zM13.654.105c-.346-.047-.696-.08-1.043-.098l-.014.273c.339.018.683.051 1.019.098l.038-.273zM9.544.527l-.058-.27c-.34.072-.681.16-1.014.264l.081.262c.325-.099.659-.185.991-.256zM1.921 5.469l.231.15c.185-.285.384-.566.592-.834l-.217-.17c-.213.276-.417.563-.606.854zM.943 7.318l.253.107c.132-.313.28-.625.439-.924l-.243-.128c-.163.307-.314.625-.449.945zM18.223 21.943l.145.234c.295-.186.586-.385.863-.594l-.164-.219c-.272.204-.557.4-.844.579zM21.248 19.219l.217.17c.215-.273.418-.561.607-.854l-.23-.148c-.186.285-.385.564-.594.832zM19.855 20.715l.184.203c.258-.23.51-.479.746-.732l-.201-.188c-.23.248-.477.488-.729.717zM22.359 17.504l.244.129c.162-.307.314-.625.449-.945l-.254-.107a11.27 11.27 0 0 1-.439.923zM23.617 13.629l.273.039c.049-.346.082-.695.102-1.043l-.275-.014c-.018.338-.051.682-.1 1.018zM23.156 15.621l.264.086c.107-.332.201-.67.279-1.01l-.268-.063c-.077.333-.169.665-.275.987zM22.453 6.672c.154.303.297.617.424.932l.256-.104c-.131-.322-.277-.643-.436-.953l-.244.125zM8.296 23.418c.331.107.67.201 1.009.279l.062-.268c-.331-.076-.663-.168-.986-.273l-.085.262zM10.335 23.889c.345.049.696.082 1.043.102l.014-.275c-.339-.018-.682-.051-1.019-.098l-.038.271zM17.326 22.449c-.303.154-.613.297-.926.424l.104.256c.318-.131.639-.275.947-.434l.004-.002-.123-.246-.006.002zM4.613 21.467c.274.213.562.418.854.605l.149-.23c-.285-.184-.565-.385-.833-.592l-.17.217zM12.417 23.725l.009.275c.348-.014.699-.041 1.045-.084l-.035-.271c-.336.041-.68.068-1.019.08zM6.37 22.604c.307.162.625.314.946.449l.107-.254c-.313-.133-.624-.279-.924-.439l-.129.244zM3.083 20.041c.233.258.48.51.734.746l.188-.201c-.249-.23-.49-.477-.717-.729l-.205.184zM14.445 23.475l.059.27c.34-.074.68-.162 1.014-.266l-.082-.262c-.325.099-.659.185-.991.258zM21.18.129A2.689 2.689 0 1 0 21.18 5.507 2.689 2.689 0 1 0 21.18.129zM15.324 15.447c0 .471.314.66.852.66.67 0 1.297-.396 1.297-1.016v-.645c-.23.107-.379.141-1.107.24-.735.109-1.042.306-1.042.761zM12 2.818c-5.07 0-9.18 4.109-9.18 9.18 0 5.068 4.11 9.18 9.18 9.18 5.07 0 9.18-4.111 9.18-9.18 0-5.07-4.11-9.18-9.18-9.18zm-2.487 13.77H5.771v-6.023h.769v5.346h2.974v.677zm4.13 0h-.619v-.67c-.405.57-.811.793-1.446.793-.843 0-1.38-.463-1.38-1.182v-3.271h.686v3c0 .52.347.85.893.85.719 0 1.181-.578 1.181-1.461v-2.389h.686v4.33zm-.53-8.393c0-1.484 1.205-2.689 2.689-2.689s2.688 1.205 2.688 2.689-1.203 2.688-2.688 2.688-2.689-1.203-2.689-2.688zm5.567 7.856v.52c-.223.059-.33.074-.471.074-.34 0-.637-.238-.711-.57-.381.406-.918.637-1.471.637-.877 0-1.422-.463-1.422-1.248 0-.527.256-.916.76-1.123.266-.107.414-.141 1.389-.264.545-.066.719-.191.719-.48v-.182c0-.412-.348-.645-.967-.645-.645 0-.957.24-1.016.77h-.693c.041-1 .686-1.404 1.734-1.404 1.066 0 1.627.412 1.627 1.182v2.412c0 .215.133.338.373.338.041-.002.074-.002.149-.017z", "roblox": "M18.926 23.998 0 18.892 5.075.002 24 5.108ZM15.348 10.09l-5.282-1.453-1.414 5.273 5.282 1.453z", "firebase": "M19.455 8.369c-.538-.748-1.778-2.285-3.681-4.569-.826-.991-1.535-1.832-1.884-2.245a146 146 0 0 0-.488-.576l-.207-.245-.113-.133-.022-.032-.01-.005L12.57 0l-.609.488c-1.555 1.246-2.828 2.851-3.681 4.64-.523 1.064-.864 2.105-1.043 3.176-.047.241-.088.489-.121.738-.209-.017-.421-.028-.632-.033-.018-.001-.035-.002-.059-.003a7.46 7.46 0 0 0-2.28.274l-.317.089-.163.286c-.765 1.342-1.198 2.869-1.252 4.416-.07 2.01.477 3.954 1.583 5.625 1.082 1.633 2.61 2.882 4.42 3.611l.236.095.071.025.003-.001a9.59 9.59 0 0 0 2.941.568q.171.006.342.006c1.273 0 2.513-.249 3.69-.742l.008.004.313-.145a9.63 9.63 0 0 0 3.927-3.335c1.01-1.49 1.577-3.234 1.641-5.042.075-2.161-.643-4.304-2.133-6.371m-7.083 6.695c.328 1.244.264 2.44-.191 3.558-1.135-1.12-1.967-2.352-2.475-3.665-.543-1.404-.87-2.74-.974-3.975.48.157.922.366 1.315.622 1.132.737 1.914 1.902 2.325 3.461zm.207 6.022c.482.368.99.712 1.513 1.028-.771.21-1.565.302-2.369.273a8 8 0 0 1-.373-.022c.458-.394.869-.823 1.228-1.279zm1.347-6.431c-.516-1.957-1.527-3.437-3.002-4.398-.647-.421-1.385-.741-2.194-.95.011-.134.026-.268.043-.4.014-.113.03-.216.046-.313.133-.689.332-1.37.589-2.025.099-.25.206-.499.321-.74l.004-.008c.177-.358.376-.719.61-1.105l.092-.152-.003-.001c.544-.851 1.197-1.627 1.942-2.311l.288.341c.672.796 1.304 1.548 1.878 2.237 1.291 1.549 2.966 3.583 3.612 4.48 1.277 1.771 1.893 3.579 1.83 5.375-.049 1.395-.461 2.755-1.195 3.933-.694 1.116-1.661 2.05-2.8 2.708-.636-.318-1.559-.839-2.539-1.599.79-1.575.952-3.28.479-5.072zm-2.575 5.397c-.725.939-1.587 1.55-2.09 1.856-.081-.029-.163-.06-.243-.093l-.065-.026c-1.49-.616-2.747-1.656-3.635-3.01-.907-1.384-1.356-2.993-1.298-4.653.041-1.19.338-2.327.882-3.379.316-.07.638-.114.96-.131l.084-.002c.162-.003.324-.003.478 0 .227.011.454.035.677.07.073 1.513.445 3.145 1.105 4.852.637 1.644 1.694 3.162 3.144 4.515z", "vite": "m8.286 10.578.512-8.657a.306.306 0 0 1 .247-.282L17.377.006a.306.306 0 0 1 .353.385l-1.558 5.403a.306.306 0 0 0 .352.385l2.388-.46a.306.306 0 0 1 .332.438l-6.79 13.55-.123.19a.294.294 0 0 1-.252.14c-.177 0-.35-.152-.305-.369l1.095-5.301a.306.306 0 0 0-.388-.355l-1.433.435a.306.306 0 0 1-.389-.354l.69-3.375a.306.306 0 0 0-.37-.36l-2.32.536a.306.306 0 0 1-.374-.316zm14.976-7.926L17.284 3.74l-.544 1.887 2.077-.4a.8.8 0 0 1 .84.369.8.8 0 0 1 .034.783L12.9 19.93l-.013.025-.015.023-.122.19a.801.801 0 0 1-.672.37.826.826 0 0 1-.634-.302.8.8 0 0 1-.16-.67l1.029-4.981-1.12.34a.81.81 0 0 1-.86-.262.802.802 0 0 1-.165-.67l.63-3.08-2.027.468a.808.808 0 0 1-.768-.233.81.81 0 0 1-.217-.6l.389-6.57-7.44-1.33a.612.612 0 0 0-.64.906L11.58 23.691a.612.612 0 0 0 1.066-.004l11.26-20.135a.612.612 0 0 0-.644-.9z", "github": "M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12", "vercel": "M24 22.525H0l12-21.05 12 21.05z", "git": "M23.546 10.93L13.067.452c-.604-.603-1.582-.603-2.188 0L8.708 2.627l2.76 2.76c.645-.215 1.379-.07 1.889.441.516.515.658 1.258.438 1.9l2.658 2.66c.645-.223 1.387-.078 1.9.435.721.72.721 1.884 0 2.604-.719.719-1.881.719-2.6 0-.539-.541-.674-1.337-.404-1.996L12.86 8.955v6.525c.176.086.342.203.488.348.713.721.713 1.883 0 2.6-.719.721-1.889.721-2.609 0-.719-.719-.719-1.879 0-2.598.182-.18.387-.316.605-.406V8.835c-.217-.091-.424-.222-.6-.401-.545-.545-.676-1.342-.396-2.009L7.636 3.7.45 10.881c-.6.605-.6 1.584 0 2.189l10.48 10.477c.604.604 1.582.604 2.186 0l10.43-10.43c.605-.603.605-1.582 0-2.187"};
+
+function TechIcon({ name }) {
+  return <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d={TECH_ICONS[name]} /></svg>;
+}
+
+// Baris 1: bahasa & framework. Baris 2: tools & platform. Tambah atau hapus sesuka kamu.
+const STACK_A = [
+  { node: <TechIcon name="html5" />, title: "HTML", hoverColor: "#e34f26" },
+  { node: <TechIcon name="css3" />, title: "CSS", hoverColor: "#1572b6" },
+  { node: <TechIcon name="javascript" />, title: "JavaScript", hoverColor: "#f0c808" },
+  { node: <TechIcon name="react" />, title: "React", hoverColor: "#61dafb" },
+  { node: <TechIcon name="lua" />, title: "Lua", hoverColor: "#6b6fd6" },
+  { node: <TechIcon name="roblox" />, title: "Roblox Studio" },
+];
+const STACK_B = [
+  { node: <TechIcon name="firebase" />, title: "Firebase", hoverColor: "#dd2c00" },
+  { node: <TechIcon name="vite" />, title: "Vite", hoverColor: "#646cff" },
+  { node: <TechIcon name="github" />, title: "GitHub" },
+  { node: <TechIcon name="vercel" />, title: "Vercel" },
+  { node: <TechIcon name="git" />, title: "Git", hoverColor: "#f05032" },
+];
+
 function App() {
   const [theme, setTheme] = useStored("theme", window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
@@ -683,10 +786,21 @@ function App() {
   const initials = p.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const [active, setActive] = useState("#home");
   useEffect(() => {
-    const els = ["home", "projects", "games", "certs", "contact"].map((i) => document.getElementById(i)).filter(Boolean);
-    const o = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) setActive("#" + e.target.id); }), { rootMargin: "-40% 0px -55% 0px" });
-    els.forEach((el) => o.observe(el));
-    return () => o.disconnect();
+    // Tandai menu aktif sesuai posisi scroll. Di dasar halaman, Kontak yang aktif.
+    const ids = ["home", "projects", "games", "certs", "contact"];
+    const update = () => {
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 8) return setActive("#contact");
+      let cur = "home";
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= window.innerHeight * 0.4) cur = id;
+      }
+      setActive("#" + cur);
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => { window.removeEventListener("scroll", update); window.removeEventListener("resize", update); };
   }, []);
 
   return (
@@ -747,7 +861,7 @@ function App() {
           <Reveal>
             <Tilt className="photo">
               <div className="frame" style={{ cursor: "default" }}>
-                <Img src={p.photo} alt={p.name} fallback={<div className="ph">Foto belum tersedia</div>} />
+                <PhotoReveal src={p.photo} revealSrc="/gojo.jpg" alt={p.name} theme={theme} fallback={<div className="ph">Foto belum tersedia</div>} />
               </div>
               <h3>{p.name}</h3>
               <span className="muted">{p.role}</span>
@@ -756,9 +870,39 @@ function App() {
           </Reveal>
         </section>
 
+        <section id="stack">
+          <Reveal>
+            <h2>Teknologi <span>yang Saya Pakai</span></h2>
+          </Reveal>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 28 }}>
+            <LogoLoop logos={STACK_A} speed={70} direction="left" logoHeight={44} gap={64} hoverSpeed={0} scaleOnHover labels="hover" ariaLabel="Bahasa dan framework" style={{ color: "var(--muted)", minWidth: 0 }} />
+            <LogoLoop logos={STACK_B} speed={70} direction="right" logoHeight={44} gap={64} hoverSpeed={0} scaleOnHover labels="hover" ariaLabel="Tools dan platform" style={{ color: "var(--muted)", minWidth: 0 }} />
+          </div>
+        </section>
+
         <Gallery id="projects" title="Project" accent="Website" items={PROJECTS} />
         <Gallery id="games" title="Project" accent="Game Roblox" items={GAMES} cta="Main di Roblox ↗" />
-        <Gallery id="certs" title="Sertifikat" accent="Saya" items={CERTS} zoom />
+        <Gallery
+          id="certs"
+          title="Sertifikat"
+          accent="Saya"
+          items={CERTS}
+          zoom
+          extra={
+            <div style={{ marginBottom: 24 }}>
+              <LogoLoop
+                logos={CERTS.map((c) => ({ node: <span className="cert-chip">✓ {c.title}</span>, title: c.title }))}
+                speed={40}
+                direction="left"
+                logoHeight={28}
+                gap={14}
+                hoverSpeed={0}
+                ariaLabel="Kursus yang sudah diselesaikan"
+                style={{ minWidth: 0 }}
+              />
+            </div>
+          }
+        />
 
         <section id="contact">
           <Reveal>
@@ -779,7 +923,6 @@ function App() {
           </Reveal>
         </section>
       </main>
-      <footer>© {new Date().getFullYear()} {p.name}. Dibuat dengan ♥️</footer>
     </ClickSpark>
   );
 }
