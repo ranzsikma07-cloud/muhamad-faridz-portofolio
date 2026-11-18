@@ -704,9 +704,11 @@ function PhotoReveal({ src, revealSrc, alt, theme, fallback }) {
   const [mounted, setMounted] = useState(false);
   const [shine, setShine] = useState(1); // kilau pertama langsung jalan saat halaman dibuka
   const hover = useRef(false);
+  // Layar sentuh (HP): lingkaran yang membuka gambar asli bergerak sendiri, dan mengikuti jari saat disentuh
+  const [touch] = useState(() => !window.matchMedia("(hover: hover) and (pointer: fine)").matches);
 
   useEffect(() => {
-    const ok = window.matchMedia("(hover: hover) and (pointer: fine)").matches && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const ok = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!ok || !src) return;
     let alive = true, timer;
     const wait = (ms) => new Promise((r) => { timer = setTimeout(r, ms); });
@@ -735,7 +737,7 @@ function PhotoReveal({ src, revealSrc, alt, theme, fallback }) {
       {mounted && (
         <div
           className={"ht-layer" + (showAlt ? " on" : "")}
-          onPointerEnter={() => { hover.current = true; }}
+          onPointerEnter={(e) => { if (e.pointerType === "mouse") hover.current = true; }}
           onPointerLeave={() => { hover.current = false; }}
         >
           <HalftoneReveal
@@ -746,6 +748,7 @@ function PhotoReveal({ src, revealSrc, alt, theme, fallback }) {
             accentColor={dark ? "#ee7b52" : "#c8472b"}
             revealRadius={110}
             linger={1.2}
+            wander={touch}
           />
         </div>
       )}
@@ -872,7 +875,7 @@ function App() {
 
         <section id="stack">
           <Reveal>
-            <h2>Teknologi <span>yang Saya Pakai</span></h2>
+            <h2>Tools <span>yang Saya Pakai</span></h2>
           </Reveal>
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 28 }}>
             <LogoLoop logos={STACK_A} speed={70} direction="left" logoHeight={44} gap={64} hoverSpeed={0} scaleOnHover labels="hover" ariaLabel="Bahasa dan framework" style={{ color: "var(--muted)", minWidth: 0 }} />
