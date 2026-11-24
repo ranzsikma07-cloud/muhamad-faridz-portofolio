@@ -19,7 +19,7 @@ function connectDiscordRPC() {
         // Beri jeda 1 detik agar bridge siap menerima data
     setTimeout(() => {
     socket.send(JSON.stringify({
-        details: 'lagi ngodig jangan ganggu', // <--- Ganti kata-katanya di sini
+        details: 'lagi ngerjain', // <--- Ganti kata-katanya di sini
         state: 'project'     // <--- Ganti sub-statusnya di sini
     }));
     }, 1000);

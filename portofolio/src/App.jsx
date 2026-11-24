@@ -830,7 +830,7 @@ function App() {
           <Reveal>
             <p className="muted" style={{ margin: 0 }}>Halo, saya</p>
             <BlurText text={p.name} />
-            <h2 style={{ marginBottom: 12 }}><Typing words={[p.role, "Front-End Developer", "React Enthusiast"]} /></h2>
+            <h2 style={{ marginBottom: 12 }}><Typing words={[p.role, "Full-Stack Web Developer"]} /></h2>
             <p className="muted">{p.bio}</p>
             <div className="row hero-actions">
               <Magnet padding={90} magnetStrength={4}>
